@@ -22,8 +22,8 @@ public interface Database {
     prop storage: Storage
 
     /**
-     * Throws `Cancelled` if a write is pending, or this is a snapshot of a revision gone by. Every
-     * query already checks; this is for long computations of one's own between them.
+     * Throws `CancelledException` if a write is pending, or this is a snapshot of a revision gone
+     * by. Every query already checks; this is for long computations of one's own between them.
      */
     func unwindIfCancelled(): Unit {
         storage.unwindIfCancelled()
@@ -37,8 +37,8 @@ public interface Database {
  * `Storage()` makes a database and its root handle, which always reads the current revision and is
  * the only one that changes inputs. `snapshot` gives another thread a handle pinned to the revision
  * current when it was taken. Changing an input cancels what is in flight on the snapshots and waits
- * for that to end, never for a snapshot as such: one used after it is simply `Cancelled`, so there
- * is nothing to close, and a snapshot forgotten holds up nothing.
+ * for that to end, never for a snapshot as such: one used after it simply throws
+ * `CancelledException`, so there is nothing to close, and a snapshot forgotten holds up nothing.
  */
 public class Storage {
     private Storage(
@@ -78,28 +78,30 @@ public class Storage {
 
     /**
      * Another handle of the same database, for another thread, pinned to the revision this one
-     * reads. Its queries are `Cancelled` too once `cancelledBy` gives `true`: how whoever asked
-     * for the answer (an editor's `$/cancelRequest`) stops a computation of it midway.
+     * reads. Its queries throw `CancelledException` too once `cancelledBy` gives `true`: how
+     * whoever asked for the answer (an editor's `$/cancelRequest`) stops a computation of it midway.
      */
     public func snapshot(cancelledBy!: () -> Bool = {=> false}): Storage {
         Storage(runtime, pinned ?? runtime.revision, cancelledBy)
     }
 
     /**
-     * @throws Cancelled - if a write is pending, this is a snapshot of a revision gone by, or it
-     * was asked to stop
+     * @throws CancelledException - if a write is pending, this is a snapshot of a revision gone by,
+     * or it was asked to stop
      */
     @Frozen
     public func unwindIfCancelled(): Unit {
         checkAskedToStop()
-        runtime.unwindIfCancelled(pinned)
+        if (runtime.isCancelled(pinned)) {
+            throw unwinding(CancelledException())
+        }
     }
 
     /**
      * Runs one operation of this handle, which a write waits for if it is not inside another.
      *
-     * @throws Cancelled - if a write is pending, this is a snapshot of a revision gone by, or it
-     * was asked to stop
+     * @throws CancelledException - if a write is pending, this is a snapshot of a revision gone by,
+     * or it was asked to stop
      */
     @Frozen
     func read<T>(operation: () -> T): T {
@@ -125,8 +127,8 @@ public class Storage {
         let outermost = depth == 0
         if (outermost) {
             runtime.beginRead(pinned)
-        } else {
-            runtime.unwindIfCancelled(pinned)
+        } else if (runtime.isCancelled(pinned)) {
+            throw unwinding(CancelledException())
         }
         depth++
         outermost
@@ -143,7 +145,7 @@ public class Storage {
     @Frozen
     private func checkAskedToStop(): Unit {
         if (cancelledBy()) {
-            throw Cancelled()
+            throw unwinding(CancelledException())
         }
     }
 
@@ -222,7 +224,7 @@ public class Storage {
                 return
         }
         if (entered >= stack.size || stack[entered].key != key) {
-            throw VerifyingCycleException(key)
+            throw unwinding(VerifyingCycleException(key), from: entered)
         }
         let participants = stack.toArray()[entered..]
         if (!participants.iterator().all {frame => runtime.ingredientAt(frame.key.ingredient).hasFallback()}) {
@@ -246,11 +248,30 @@ public class Storage {
      * Waits, having given way on a loop of handles waiting for one another, for the handle given way
      * to to let go of what this one waited for.
      *
-     * @throws Cancelled - if a write is pending, this is a snapshot of a revision gone by, or it
-     * was asked to stop
+     * @throws CancelledException - if a write is pending, this is a snapshot of a revision gone by,
+     * or it was asked to stop
      */
     func giveWay(): Unit {
         runtime.giveWay(handle) {=> unwindIfCancelled()}
+    }
+
+    /**
+     * Marks the queries executing from the `from`th on as unwound by `e`, about to be thrown, and
+     * gives it: one whose body catches it and returns stores no memo, and throws it on (`execute`).
+     * A query that begins after it is not marked, nor is one below `from`, where it is caught.
+     */
+    func unwinding<E>(e: E, from!: Int64 = 0): E where E <: Exception {
+        for (frame in stack.toArray()[from..]) {
+            frame.unwoundBy = e
+        }
+        e
+    }
+
+    /**
+     * `unwinding` for a `GiveWayException`, which unwinds to whoever claimed its key on this handle.
+     */
+    func givingWay(e: GiveWayException): GiveWayException {
+        unwinding(e, from: active.get(e.key) ?? 0)
     }
 
     func exit(key: DatabaseKey): Unit {
@@ -317,6 +338,12 @@ class ActiveQuery {
      * On a cycle whose queries all take their fallback, the value is the fallback.
      */
     var inCycle = false
+
+    /**
+     * What unwinds the query, to a catch below it: its body catching that is no reason to keep
+     * what it computes.
+     */
+    var unwoundBy: ?Exception = None
 
     func read(key: DatabaseKey, durability: Durability, changedAt: Int64): Unit {
         if (seen.add(key)) {

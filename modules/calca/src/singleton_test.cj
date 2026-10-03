@@ -104,7 +104,7 @@ class SingletonTest {
 
         // assert
         @Expect(Settings.get(snapshot).tabSize(snapshot), 2)
-        @AssertThrows[Cancelled](Settings.tryGet(before))
+        @AssertThrows[CancelledException](Settings.tryGet(before))
     }
 
     @TestCase

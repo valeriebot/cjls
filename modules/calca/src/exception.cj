@@ -5,13 +5,13 @@ package calca
  * its snapshot is of a revision gone by, and nothing it computes would be current; or whoever uses
  * the snapshot asked it to stop. Catch it where the handle is used, and drop the handle.
  */
-public class Cancelled <: Exception {
-    Cancelled() {
+public class CancelledException <: Exception {
+    CancelledException() {
         super("the query was cancelled")
     }
 
     protected func getClassName(): String {
-        "Cancelled"
+        "CancelledException"
     }
 }
 

@@ -39,7 +39,8 @@ public class AnalysisDatabase <: Database {
     }
 
     /**
-     * Its queries are `Cancelled` once `cancelledBy` gives `true`, as well as once the files change.
+     * Its queries throw `CancelledException` once `cancelledBy` gives `true`, as well as once the
+     * files change.
      */
     public func snapshot(cancelledBy!: () -> Bool = {=> false}): AnalysisDatabase {
         AnalysisDatabase(storage_.snapshot(cancelledBy: cancelledBy), files, projects)

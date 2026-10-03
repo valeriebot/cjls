@@ -163,7 +163,8 @@ class Runtime {
     /**
      * Begins an operation of a handle outside any query, which a write waits for.
      *
-     * @throws Cancelled - if a write is pending, or the handle is pinned to a revision gone by
+     * @throws CancelledException - if a write is pending, or the handle is pinned to a revision
+     * gone by
      */
     @Frozen
     func beginRead(pinned: ?Int64): Unit {
@@ -174,7 +175,7 @@ class Runtime {
             if (!writePending.load()) {
                 try {
                     unwindIfCancelled(pinned)
-                } catch (e: Cancelled) {
+                } catch (e: CancelledException) {
                     endRead()
                     throw e
                 }
@@ -182,7 +183,7 @@ class Runtime {
             }
             endRead()
             if (pinned.isSome()) {
-                throw Cancelled()
+                throw CancelledException()
             }
             // the root handle waits for the write to end, and reads the revision it opens
             synchronized(gate) {}
@@ -306,7 +307,7 @@ class Runtime {
      * Waits, as handle `waiter` that gave way on a loop, until the query it waited for is let go of:
      * by then its owner has computed the loop on its own handle, and left what it found.
      *
-     * @throws Cancelled - if `unwindIfCancelled` does, looked at every `CLAIM_WAIT`
+     * @throws CancelledException - if `unwindIfCancelled` does, looked at every `CLAIM_WAIT`
      */
     func giveWay(waiter: Int64, unwindIfCancelled: () -> Unit): Unit {
         while (true) {
@@ -321,7 +322,7 @@ class Runtime {
             }
             try {
                 unwindIfCancelled()
-            } catch (e: Cancelled) {
+            } catch (e: CancelledException) {
                 stopWaiting(waiter)
                 throw e
             }
@@ -338,17 +339,26 @@ class Runtime {
     }
 
     /**
-     * @throws Cancelled - if a write is pending, or `pinned` is a revision gone by
+     * @throws CancelledException - if a write is pending, or `pinned` is a revision gone by
      */
     @Frozen
     func unwindIfCancelled(pinned: ?Int64): Unit {
-        if (writePending.load()) {
-            throw Cancelled()
+        if (isCancelled(pinned)) {
+            throw CancelledException()
         }
-        if (let Some(revision) <- pinned) {
-            if (revision != this.revision) {
-                throw Cancelled()
-            }
+    }
+
+    /**
+     * Whether a write is pending, or `pinned` is a revision gone by.
+     */
+    @Frozen
+    func isCancelled(pinned: ?Int64): Bool {
+        if (writePending.load()) {
+            return true
+        }
+        match (pinned) {
+            case Some(revision) => revision != this.revision
+            case None => false
         }
     }
 }

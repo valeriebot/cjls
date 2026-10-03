@@ -3,7 +3,7 @@ package cjls.server
 import std.collection.HashMap
 import std.sync.Mutex
 import stdx.log.Logger
-import calca.Cancelled
+import calca.CancelledException
 import loupe.vfs.VfsPath
 import jsonrpc.ErrorLogValue
 import cjls.lsp_types.*
@@ -46,7 +46,7 @@ class DiagnosticsPush {
                 for ((path, version) in documents) {
                     publish(path, version, diagnosticsOf(snapshot, path), generation)
                 }
-            } catch (_: Cancelled) {
+            } catch (_: CancelledException) {
                 logger.debug("push cancelled", [("reason", "the content was modified")])
             } catch (e: Exception) {
                 failed(e)

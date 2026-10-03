@@ -133,14 +133,14 @@ func parkedLength(db: TestDb, file: SourceFile): Int64 {
 }
 
 /**
- * `parkedLength` on `snapshot`, spawned: whether it was `Cancelled`.
+ * `parkedLength` on `snapshot`, spawned: whether it threw `CancelledException`.
  */
 func spawnParkedLength(snapshot: TestDatabase, file: SourceFile): Future<Bool> {
     spawn {
         try {
             parkedLength(snapshot, file)
             false
-        } catch (_: Cancelled) {
+        } catch (_: CancelledException) {
             true
         }
     }
@@ -499,7 +499,7 @@ class CalcaTest {
         waitForPendingWrite(late)
 
         // act, assert
-        @AssertThrows[Cancelled](length(late, file))
+        @AssertThrows[CancelledException](length(late, file))
         db.parking.released.add(())
         @Expect(reader.get())
         @Expect(write.get(), "hello")
@@ -525,8 +525,8 @@ class CalcaTest {
         changing.remove()
 
         // act, assert - would hang if the snapshot waited for the write to end
-        @AssertThrows[Cancelled](length(snapshot, file))
-        @AssertThrows[Cancelled](file.text(snapshot))
+        @AssertThrows[CancelledException](length(snapshot, file))
+        @AssertThrows[CancelledException](file.text(snapshot))
         finish.add(())
         @Expect(write.get(), "hello")
         @Expect(length(db.snapshot(), file), 3)
@@ -563,8 +563,8 @@ class CalcaTest {
         file.setText(db).to("bye")
 
         // assert
-        @AssertThrows[Cancelled](length(snapshot, file))
-        @AssertThrows[Cancelled](file.text(snapshot))
+        @AssertThrows[CancelledException](length(snapshot, file))
+        @AssertThrows[CancelledException](file.text(snapshot))
         @Expect(length(db.snapshot(), file), 3)
     }
 
@@ -696,7 +696,7 @@ class CalcaTest {
         while (true) {
             try {
                 probe.unwindIfCancelled()
-            } catch (_: Cancelled) {
+            } catch (_: CancelledException) {
                 return
             }
         }

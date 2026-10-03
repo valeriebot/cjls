@@ -169,7 +169,7 @@ public class ServerState <: FromContext<ServerState> {
 
     /**
      * The state as it is now, for a handler running on a thread of its own. Its queries stop,
-     * `Cancelled`, once `cancelledBy` gives `true`: the client cancelled the request.
+     * `CancelledException`, once `cancelledBy` gives `true`: the client cancelled the request.
      */
     public func snapshot(cancelledBy!: () -> Bool = {=> false}): ServerSnapshot {
         let files = this.files ?? vfs.files()
@@ -189,7 +189,7 @@ public class ServerState <: FromContext<ServerState> {
 /**
  * The state as it was when a message arrived, for its handler to read on a thread of its own. Once
  * the files change after it, a query on `analysis`, a snapshot of the analysis database, throws
- * `Cancelled`, which the server answers with `ContentModified`.
+ * `CancelledException`, which the server answers with `ContentModified`.
  */
 public class ServerSnapshot <: FromReadOnlyContext<ServerSnapshot> {
     ServerSnapshot(public let analysis: AnalysisDatabase, private let paths: PathInterner,

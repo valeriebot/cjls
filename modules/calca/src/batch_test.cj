@@ -59,7 +59,7 @@ class BatchTest {
         }
 
         // assert
-        @AssertThrows[Cancelled](totalLength(snapshot, a, b))
+        @AssertThrows[CancelledException](totalLength(snapshot, a, b))
         @Expect(totalLength(db, a, b), 5)
         @Expect(db.events.take(), ["totalLength"])
     }

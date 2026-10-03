@@ -35,7 +35,7 @@ Only for a client that cannot pull (`initialize` found no `textDocument.diagnost
 | read loop | snapshot; the open documents with their `version`, and a new generation for each | `DiagnosticsPush.schedule` |
 | spawn | per open document: `diagnostics(snap.analysis, fileId)` → LSP `Diagnostic`s | `documentDiagnostics`, `to_proto.cj` |
 | spawn | generation still the document's latest → `client.notify(PublishDiagnosticsNotificationSpec(), …)` with its `version`; else dropped | `DiagnosticsPush.publish` |
-| spawn | `Cancelled` → dropped, `DEBUG`: the write that cancelled it scheduled its own | `DiagnosticsPush.schedule` |
+| spawn | `CancelledException` → dropped, `DEBUG`: the write that cancelled it scheduled its own | `DiagnosticsPush.schedule` |
 | spawn | the connection closed → dropped, `DEBUG`; anything else → `ERROR`, nothing sent | `DiagnosticsPush.schedule` |
 
 `didClose` publishes an empty list for the document at once, on the read loop, so its errors do not stay in the editor.
@@ -44,10 +44,10 @@ Only for a client that cannot pull (`initialize` found no `textDocument.diagnost
 
 | Cause | Mechanism | Answer |
 |---|---|---|
-| a file changed | `Runtime.write` cancels in-flight queries; a stale snapshot is `Cancelled` | `ContentModified`; `ServerCancelled` with `retriggerRequest: true` for `textDocument/diagnostic` (D14) |
-| `$/cancelRequest` | token → snapshot's `cancelledBy` → next calca call throws `Cancelled` | `RequestCancelled` |
+| a file changed | `Runtime.write` cancels in-flight queries; a stale snapshot throws `CancelledException` | `ContentModified`; `ServerCancelled` with `retriggerRequest: true` for `textDocument/diagnostic` (D14) |
+| `$/cancelRequest` | token → snapshot's `cancelledBy` → next calca call throws `CancelledException` | `RequestCancelled` |
 | connection closed | every token cancelled | dropped |
-| a push overtaken by a write | its snapshot is `Cancelled`, or its generation is no longer the latest | nothing sent |
+| a push overtaken by a write | its snapshot throws `CancelledException`, or its generation is no longer the latest | nothing sent |
 
 ## Rules
 
@@ -57,7 +57,7 @@ Only for a client that cannot pull (`initialize` found no `textDocument.diagnost
 | S2 | A `readonly` handler reads everything from its snapshot: `FileId`, text for positions (`file.text(snap.analysis)`, never the `Vfs`), encoding. |
 | S3 | Handlers only translate; logic goes to `loupe`. Conversion lives in `from_proto.cj` / `to_proto.cj`. |
 | S4 | Unknown document → empty answer (`null`, `[]`, an empty report); `RpcException` only for bad params. |
-| S5 | Never catch `Cancelled` in a handler; the server maps it (see table). |
+| S5 | Never catch `CancelledException` in a handler; the server maps it (see table). |
 | S6 | Handlers are not `@CalcaTracked` (D6). |
 | S7 | Work after a write is scheduled by the server, not by a handler: it takes the snapshot on the read loop, after the `Context` handler returned, and runs the queries on a `spawn` (D14). |
 | S8 | One source of diagnostics per client: a client that pulls is never pushed to (D14). |

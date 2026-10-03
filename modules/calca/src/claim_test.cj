@@ -68,7 +68,7 @@ enum Result<T> {
 
     func isCancelled(): Bool {
         match (this) {
-            case Err(e) => e is Cancelled
+            case Err(e) => e is CancelledException
             case _ => false
         }
     }
@@ -246,7 +246,7 @@ class ClaimTest {
         while (true) {
             try {
                 probe.unwindIfCancelled()
-            } catch (_: Cancelled) {
+            } catch (_: CancelledException) {
                 return
             }
         }

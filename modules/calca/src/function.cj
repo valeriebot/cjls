@@ -36,7 +36,8 @@ public class TrackedFunction<D, K, V> where D <: Database, K <: Hashable & Equat
      * The value of the function at `key`: remembered, if nothing it read has changed since, else
      * computed again. Recorded as read by the query running.
      *
-     * @throws Cancelled - if a write is pending, or `db` is a snapshot of a revision gone by
+     * @throws CancelledException - if a write is pending, or `db` is a snapshot of a revision gone
+     * by
      * @throws CycleException - if the value is already being computed on this handle
      */
     @Frozen
@@ -403,18 +404,22 @@ class MemoTable<D, K, V> <: Ingredient & KeyedByInterned where D <: Database, K 
      *
      * @throws GiveWayException - if the handle computing it waits, through others or not, for this
      * one, which is to give way: it still waits for the key, until its owner lets go of it
-     * @throws Cancelled - if a write is pending, or the waiting handle was asked to stop
+     * @throws CancelledException - if a write is pending, or the waiting handle was asked to stop
      */
     private func claim(storage: Storage, key: DatabaseKey): Unit {
         var waited = false
         while (let Some(owner) <- claims.get(key.id)) {
-            storage.runtime.startWaiting(storage.handle, owner, key)
+            try {
+                storage.runtime.startWaiting(storage.handle, owner, key)
+            } catch (e: GiveWayException) {
+                throw storage.givingWay(e)
+            }
             waited = true
             try {
                 // no one tells a waiter its own snapshot was asked to stop: it looks now and then
                 released.wait(timeout: CLAIM_WAIT)
                 storage.unwindIfCancelled()
-            } catch (e: Cancelled) {
+            } catch (e: CancelledException) {
                 storage.runtime.stopWaiting(storage.handle)
                 throw e
             }
@@ -469,6 +474,10 @@ class MemoTable<D, K, V> <: Ingredient & KeyedByInterned where D <: Database, K 
      *
      * On a cycle whose queries all have a fallback, the value is the fallback, and the memo depends
      * on what the whole cycle read.
+     *
+     * A body that catches what unwinds it (`catch (e: Exception)` around a fetch) and returns has
+     * computed a value from reads its memo does not know of, maybe in a revision cancelled: what
+     * unwinds it is thrown again, and nothing is stored.
      */
     private func execute(db: D, storage: Storage, databaseKey: DatabaseKey, key: K, old: ?Memo<V>,
         unchanged!: Bool): (V, Memo<V>) {
@@ -487,6 +496,9 @@ class MemoTable<D, K, V> <: Ingredient & KeyedByInterned where D <: Database, K 
             fallback(db, key, frame)
         } finally {
             storage.pop()
+        }
+        if (let Some(e) <- frame.unwoundBy) {
+            throw e
         }
         let changedAt = match (old) {
             case Some(memo) where frame.durability >= memo.durability && (unchanged || isEqual(memo.value, value)) =>

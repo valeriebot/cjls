@@ -93,7 +93,7 @@ class DbTest {
         db.setFileText(FileId(0), Rope("let y = 2\n"))
 
         // assert
-        @AssertThrows[Cancelled](lineCount(snapshot, file))
+        @AssertThrows[CancelledException](lineCount(snapshot, file))
         @Expect(file.text(db.snapshot()).toString(), "let y = 2\n")
     }
 

@@ -4,7 +4,7 @@ import std.collection.*
 import std.deriving.*
 import std.time.MonoTime
 import stdx.log.*
-import calca.Cancelled
+import calca.CancelledException
 import fjson.RawJson
 import jsonrpc.*
 import loupe.vfs.VfsPath
@@ -160,7 +160,7 @@ class Server <: Handler {
 }
 
 /**
- * Why a query of `request` was `Cancelled`: the client cancelled the request, or the files changed
+ * Why a query of `request` threw `CancelledException`: the client cancelled the request, or the files changed
  * under it, which the client may ask again for — and a diagnostic pull asks again at once, rather
  * than keep the diagnostics it had (D14).
  */
@@ -189,7 +189,7 @@ private func answer(request: InboundRequest, logger: Logger, handler: () -> RawJ
     let start = MonoTime.now()
     let answer = try {
         ResultOrError.Result(handler())
-    } catch (_: Cancelled) {
+    } catch (_: CancelledException) {
         ResultOrError.Error(cancelledError(request, logger))
     } catch (e: Exception) {
         logFailure(logger, e)
@@ -211,7 +211,7 @@ private func run(logger: Logger, handler: () -> Unit): Unit {
     try {
         handler()
         logger.debug("handled", [("took", MonoTime.now() - start)])
-    } catch (_: Cancelled) {
+    } catch (_: CancelledException) {
         logger.debug("cancelled", [("reason", "the content was modified")])
     } catch (e: Exception) {
         logFailure(logger, e)
