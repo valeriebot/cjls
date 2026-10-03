@@ -26,14 +26,27 @@ class DiagnosticsTest {
 
     @TestCase
     func aSyntaxErrorIsAnErrorWhereTheParserPutIt() {
-        // act
-        let result = diagnosticsOf("class A {")
+        checkDiagnostics(#"
+            class A {
+            //       | error: expected '}'
+            "#)
+    }
 
-        // assert
-        @Expect(result.size, 1)
-        @Expect(result[0].range, TextRange(9, 9))
-        @Expect(result[0].severity == Severity.Error)
-        @Expect(result[0].message, "expected '}'")
+    @TestCase
+    func eachFileHasItsOwn() {
+        checkDiagnostics(#"
+            //- /a.cj
+              func f() {
+                  let x =
+            //           | error: expected an expression
+              }
+            //- /b.cj
+            func g(): Int64 { 1 }
+            //- /c.cj
+              class C { func }
+            //              | error: expected '('
+            //              | error: expected a name
+            "#)
     }
 
     @TestCase

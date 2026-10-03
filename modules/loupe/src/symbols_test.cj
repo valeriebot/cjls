@@ -40,20 +40,29 @@ class WorkspaceSymbolsTest {
 
     @TestCase
     func anEmptyQueryMatchesEveryDeclaration() {
-        // act
-        let found = search(["class A {\n    func f() {}\n}\n", "let x = 1\n"], "")
-
-        // assert
-        @Expect(found, ["A in - @ 0", "f in A @ 0", "x in - @ 1"])
+        checkSymbols(#"
+            //- /a.cj
+            class A {
+            //    ^ Class
+                func f() {}
+            //       ^ Method in A
+            }
+            //- /b.cj
+            let x = 1
+            //  ^ Variable
+            "#, "")
     }
 
     @TestCase
     func aMemberIsFoundUnderWhatHoldsIt() {
-        // act
-        let found = search(["class Outer {\n    func target() {}\n}\nenum E { | Target }\n"], "target")
-
-        // assert
-        @Expect(found, ["target in Outer @ 0", "Target in E @ 0"])
+        checkSymbols(#"
+            class Outer {
+                func target() {}
+            //       ^^^^^^ Method in Outer
+            }
+            enum E { | Target }
+            //         ^^^^^^ EnumConstructor in E
+            "#, "target")
     }
 
     @TestCase

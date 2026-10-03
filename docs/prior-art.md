@@ -61,7 +61,7 @@ Looked at, not references:
 | Macros | R1, R4 | expand out of process, by running the compiled macro package | #47 |
 | Workspace symbols, references | R6, R7, R8 | R1 searches the text, then resolves; the others keep an index. In memory first; on disk only when measured to be needed | #12, #50 |
 | LSP extensions | R1 | `lsp-extensions.md`: methods of its own where LSP has none, under a prefix, in `experimental` | D15 |
-| Test fixtures | R1 | `$0` cursors, `//- /path` multi-file fixtures | not yet |
+| Test fixtures | R1 | `$0` cursors, `//- /path` multi-file fixtures, `//^^^` annotations, expect-test's `UPDATE_EXPECT` | D43 |
 
 ## Competitors
 
